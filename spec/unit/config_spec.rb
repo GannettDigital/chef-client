@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 describe 'chef-client::config' do
-  let(:chef_run) do
+  cached(:chef_run) do
     ChefSpec::ServerRunner.new.converge(described_recipe)
   end
 
@@ -13,6 +13,46 @@ describe 'chef-client::config' do
   it 'contains the default validation_client_name setting' do
     expect(chef_run).to render_file('/etc/chef/client.rb') \
       .with_content(/validation_client_name/)
+  end
+
+  context 'when Chef::VERSION is 12.4.0 or greater' do
+    ## chef-config was introduced in 12.4.0
+    ## ohai supports config files in 8.6.0
+    before(:each) do
+      @chef = ChefSpec.const_get(:Chef)
+      @chef_version = @chef.const_get(:VERSION)
+      @chef.send(:remove_const, :VERSION)
+      @chef.const_set(:VERSION, '12.4.0')
+    end
+
+    after(:each) do
+      @chef.send(:remove_const, :VERSION)
+      @chef.const_set(:VERSION, @chef_version)
+    end
+
+    it 'loads config files via ChefConfig::Config.from_file' do
+      expect(chef_run).to render_file('/etc/chef/client.rb') \
+        .with_content(/ChefConfig::Config.from_file/)
+    end
+  end
+
+  context 'when Chef::VERSION is 12.3.0 or earlier' do
+    before(:each) do
+      @chef = ChefSpec.const_get(:Chef)
+      @chef_version = @chef.const_get(:VERSION)
+      @chef.send(:remove_const, :VERSION)
+      @chef.const_set(:VERSION, '12.3.0')
+    end
+
+    after(:each) do
+      @chef.send(:remove_const, :VERSION)
+      @chef.const_set(:VERSION, @chef_version)
+    end
+
+    it 'loads config files via Chef::Config.from_file' do
+      expect(chef_run).to render_file('/etc/chef/client.rb') \
+        .with_content(/Chef::Config.from_file/)
+    end
   end
 
   [
@@ -39,7 +79,7 @@ describe 'chef-client::config' do
   end
 
   context 'Custom Attributes' do
-    let(:chef_run) do
+    cached(:chef_run) do
       ChefSpec::ServerRunner.new do |node|
         node.set['ohai']['disabled_plugins'] = [:passwd, 'dmi']
         node.set['ohai']['plugin_path'] = '/etc/chef/ohai_plugins'
